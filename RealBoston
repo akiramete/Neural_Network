@@ -1,0 +1,273 @@
+##this is the hoston using dynamic learning rate and conclusion is wrong
+
+import keras
+import matplotlib.pyplot as plt
+import numpy as np
+from keras.callbacks import LambdaCallback
+from keras.datasets import boston_housing
+
+from keras.models import Sequential, Model
+from keras.layers import Dense
+from keras.optimizers import RMSprop
+
+
+import keras.backend as K
+from keras.callbacks import LearningRateScheduler
+
+batch_size = 128
+num_classes= 13
+epochs = 50
+
+(x_train,y_train),(x_test,y_test) = boston_housing.load_data()
+
+#
+#mean = x_train.mean(axis = 0)
+#std = x_train.std(axis = 0)
+#x_train = (x_train - mean)/std
+#x_test = (x_test - mean)/std
+
+
+
+
+x_train = x_train.reshape(404, 13)
+x_test = x_test.reshape(102, 13)
+x_train = x_train.astype('float32')
+x_test = x_test.astype('float32')
+#################################################
+#pre work
+mean = x_train.mean(axis=0)
+x_train -= mean
+std = x_train.std(axis=0)
+x_train /= std
+x_test -= mean
+x_test /= std
+######################################
+
+print(x_train.shape[0],'train samples')
+print(x_test.shape[0],'test samples')
+
+#y_train = keras.utils.to_categorical(y_train,num_classes)  # 5 to[0, 0, 0, 0, 0, 1, 0, 0, 0, 0]
+#y_test = keras.utils.to_categorical(y_test,num_classes)
+
+#np.random.seed(seed=0)
+
+model = Sequential()
+
+model.add(Dense(64,activation='linear',name = "dense_1",input_shape=(13,)))
+#model.add(Dense(4,activation='relu',name = "dense_1",input_shape=(13,)))
+#
+#model.add(Dense(4, activation='relu',name = "dense_2"))
+
+#model.add(Dense(1, activation='softmax'))
+model.add(Dense(1,activation='linear'))
+#model.add(Dense(1,activation='relu'))
+#model.add(Dense(1))
+
+model.summary()
+
+def my_stp(x):
+    if x >= 0:
+        return 1
+    else:
+        return 0
+#def my_stp(x):
+#    if x>0:
+#        return 1
+#    elif x=0:
+#        return 0
+#    else:
+#        return -1
+######################################change yita
+
+delta_weight = []
+yita = []
+
+
+#
+#
+#def yita_reset():
+#    for (int i = 0; ; i++):
+#        delta_weight[i] = wgt[i] - wgt[i-1]
+#        yita[i] =  1 - np.square(wgt[i-1] - my_stp(delta_weight[i-1]))
+#
+#
+#
+#    delta_weight = wgt
+#    learning_rate = yita
+#######################################
+
+learning_rate = 0.0001
+#learning_rate = np.random(1)
+
+delta_weight.append(0)
+yita.append(learning_rate)
+
+
+print('learning_rate')
+#
+model.compile(loss='mse',
+              optimizer=keras.optimizers.SGD(lr=learning_rate, momentum=0.0, decay=0.0, nesterov=False),
+              metrics=['mse'])
+#model.compile(loss='mse',
+#              optimizer='RMSprop',
+#              metrics=['mse'])
+
+
+#model.compile(loss='mse',
+#              optimizer='sgd')
+
+#model.compile(loss='mse',
+#              optimizer=keras.optimizers.Adam())
+
+
+#random.seed(0)
+
+#epoch_print_callback = LambdaCallback(on_epoch_end = lambda epoch, logs: print(str(model.get_weights()[0][2,2])+'\n')
+#plot_weight_callback = LambdaCallback(on_epoch_end = lambda epoch, logs: plt.plot(np.arange(epoch),logs['epoch_print_callback']))
+
+
+
+############################################  add the function yita into the code
+
+######################################################
+#wgt = str(model.get_weights()[0][2,2])
+
+wgt = []
+
+#
+#epoch_print_callback = LambdaCallback(on_epoch_end=lambda epoch,logs: wgt.append(model.get_weights()[2][10,0]))
+
+class WCYCallBack(keras.callbacks.Callback):
+#    def on_train_begin(self, logs={}):
+#        self.losses = []
+
+#    def on_epoch_begin(self, epoch, logs={}):
+    
+#        
+    def on_epoch_end(self, epoch, logs={}):
+        wgt.append(model.get_weights()[0][10,0])
+        
+        
+        i = epoch
+        print(i)
+        
+
+        lr = K.get_value(model.optimizer.lr)#pick lr out of the optimizer,then do changes, and put then it in,not use "xxx = xxx"###############
+        
+        
+
+        delta_weight.append(wgt[i] - wgt[i-1])
+        yita.append( 1 - np.square(wgt[i-1] - my_stp(delta_weight[i-1])))
+        
+
+        lr = yita[i]    
+
+        K.set_value(model.optimizer.lr, lr)#####################################
+   
+        print(lr)
+
+
+
+callback = WCYCallBack()
+
+#set_yita = LambdaCallback(on_epoch_end = lambda epoch,logs:)
+
+
+
+#plot_weight_callback = LambdaCallback(on_epoch_end = lambda epoch, logs:plt.plot(np.arange(epoch),logs[str(model.get_weights()[0][2,2])]))
+history = model.fit(x_train[0].reshape(1,13), y_train[0].reshape(1,1),
+                    batch_size=batch_size,
+                    epochs=epochs,
+                    verbose=1,
+                    validation_data=(x_test, y_test),
+                    callbacks=[callback]
+#                    callbacks=[keras.callbacks.LambdaCallback(on_epoch_end=lambda epoch,logs: print(str(model.get_weights()[0][2,2])+'\n'))]
+
+                    )
+score = model.evaluate(x_test, y_test, verbose=0)
+
+
+    
+    
+
+##########   Why every batch end the weight dont change? think
+#########    Is this too small learning rate or when it transfer to latter layer the gradiant disappeared?
+#################################################
+#from keras import backend as K
+#
+##The layer number
+#n = 2 
+## with a Sequential model
+#get_nth_layer_output = K.function([model.layers[0].input],
+#                                  [model.layers[n].output])
+#layer_output = get_nth_layer_output([0])[0]
+#
+#nth_weights = model.layers[n].get_weights()
+################
+#another way to get weight
+#keras.callbacks.LambdaCallback(on_epoch_begin=None, on_epoch_end=1 , on_batch_begin=None, on_batch_end=None, on_train_begin=None, on_train_end=None)
+#model.get_weights()[0][0,0]
+
+#layer_name = 'dense_1'
+##intermediate_layer_model = Model(inputs = model.input,
+##                                 outputs = model.get_layer(layer_name).output)
+###intermediate_output = intermediate_layer_model.predict(x_test)
+#wgt[] = model.get_weight('dense_1')
+#
+#
+#doc = open(r'C://Users//Administrator//Desktop//1.txt','w')
+#for i in wgt:
+#    print(i)
+#    print(i , file = doc)
+#doc.close()
+######################
+
+
+
+##finish
+######################
+
+#wgt = model.get_weights(layer_name)
+#doc = open(r'C://Users//Administrator//Desktop//1.txt','w')
+#for i in wgt:
+#    print(i)
+#    print(i , file = doc)
+#doc.close()
+
+#print('Test loss:', score[0])
+#print('Test accuracy:', score[1])
+
+## draw acc
+#plt.plot(history.history['acc'])
+#plt.plot(history.history['val_acc'])
+#plt.title('Model mse')
+#plt.ylabel('mse')
+#plt.xlabel('Epoch')
+#plt.legend(['Train', 'Test'], loc='upper left')
+#plt.show()
+
+# draw loss
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('Model loss')
+plt.ylabel('Loss')
+plt.xlabel('Epoch')
+plt.legend(['Train', 'Test'], loc='upper left')
+plt.show()
+
+
+
+#plt.savefig("lr0.5.png",600)
+plt.plot(wgt)
+
+#plt.plot(np.arange(epoch),logs[''])
+plt.title('weight[0][10,0]')
+plt.ylabel('weights')
+plt.xlabel('Epoch')
+plt.legend(['callbacks'], loc='upper left')
+plt.show()
+
+
+print("loss = ",history.history['loss'])
+print("weight = ",wgt)
+print("yita = ",yita)
